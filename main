@@ -1,5 +1,5 @@
 # ============================================================
-# ZEXXIT METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v18
+# ZEXXIT METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v19
 # ============================================================
 
 import requests
@@ -37,6 +37,9 @@ REVIEWS_CHANNEL = -1003836138921
 PHOTO_URL = "https://i.ibb.co/R4603sD3/IMG-3346.jpg"
 PHOTO_FILE_ID = None
 
+REVIEWS_URL = "https://t.me/Otziv_raxa11"
+RULES_URL = "https://t.me/Zexxit_pravila"
+
 PAY_PHONE = "+79657620902"
 PAY_CARD = "2200702065272812"
 PAY_BANK = "Т-банк (Тинькофф)"
@@ -69,15 +72,13 @@ E_BAG       = "5431406343917414987"
 E_BOX       = "5429424809215797643"
 E_CARD      = "5310169226856644648"
 E_PHONE     = "5310076249404621168"
-E_LIGHTNING = "5330051403563943171"
-E_FIRE      = "5346301287774323405"
+E_FIRE      = "5330051403563943171"
 
 BTN_SUPPORT = "5269762028506989874"
 BTN_KITS    = "5429424809215797643"
 BTN_LOOT    = "5431406343917414987"
 BTN_BOOST   = "5474525938668550110"
 BTN_RULES   = "5346066344473297711"
-BTN_PERKS   = "5474196218324228716"
 BTN_REVIEWS = "5348035702942632055"
 BTN_BOOST_PRICE = "5231102735817918643"
 
@@ -92,7 +93,7 @@ review_pending = {}
 awaiting_qr_from_admin = {}
 
 # ============================================================
-# ФУНКЦИЯ ПРЕМИУМ-ЭМОДЗИ
+# ЭМОДЗИ-ФУНКЦИИ
 # ============================================================
 def em(eid, fallback="⭐"):
     return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
@@ -103,7 +104,7 @@ def stars_row():
 def arrows_row(n=6):
     return em(E_ARROW, "➡️") * n
 
-def diamond_row(n=4):
+def diamond_row(n=3):
     return em(E_DIAMOND, "💎") * n
 
 # ============================================================
@@ -241,7 +242,7 @@ def clear_last_message(user_id):
 MAIN_CAPTION = (
     f'{em(E_MENU, "🎁")} <b>Добро пожаловать в ZEXXIT METRO SHOP!</b> {em(E_MENU, "🎁")}\n'
     f'{em(E_SHOP, "🏪")} • <b>ZEXXIT | Metro Shop</b>\n\n'
-    f'{stars_row()}{stars_row()}\n\n'
+    f'{stars_row()}\n\n'
     f'<b>Можете пользоваться навигацией ниже</b>\n\n'
     f'{arrows_row()}'
 )
@@ -251,7 +252,7 @@ KITS_TEXT = (
     f'{em(E_CHECK, "✅")} Обычный сет — 45₽\n'
     f'{em(E_CHECK, "✅")} Кобра сет — 55₽\n'
     f'{em(E_CHECK, "✅")} Сталь сет — 65₽\n\n'
-    f'{em(E_INFO, "ℹ️")} хотите купить — @Manager_Kranzayy'
+    f'{em(E_USER, "👤")} хотите купить — @Manager_Kranzayy'
 )
 
 LOOT_TEXT = (
@@ -267,9 +268,9 @@ LOOT_TEXT = (
 # ============================================================
 
 SUPPORT_CARD_MENU_TEXT = (
-    f'{em(E_DIAMOND, "💎")} <b>Выберите карту для сопровождения:</b>\n\n'
-    f'{em(E_CARD, "📌")} 7 карта — сопровождение с гарантией\n'
-    f'{em(E_CARD, "📌")} 8 карта — сопровождение с гарантией'
+    f'{em(E_DIAMOND, "💎")} <b>ВЫБЕРИТЕ КАРТУ ДЛЯ СОПРОВОЖДЕНИЯ</b> {em(E_DIAMOND, "💎")}\n\n'
+    f'{em(E_CARD, "📌")} <b>7 карта</b> — сопровождение с гарантией\n'
+    f'{em(E_CARD, "📌")} <b>8 карта</b> — сопровождение с гарантией'
 )
 
 # 7 карта — тарифы
@@ -291,32 +292,31 @@ SUPPORT_8_TARIFFS = [
 ]
 
 SUPPORT_7_DESC = (
-    "<b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\n\n"
-    "Вынос 7-10 млн — 150₽\n"
-    "Вынос 12-15 млн — 222₽\n"
-    "Вынос 30-40 млн — 555₽\n"
-    "Вынос 50-60 млн — 750₽\n"
-    "Вынос 100 млн — 1500₽\n\n"
-    "Все компоненты и письма с радиационной зоны ваши\n"
-    "Возврат утерянных вещей экипировки, в случае проигрыша\n"
-    "Все вещи с типов ваши, мы поможем вынести.\n\n"
-    "Даем ф6 сета с мк ВК и письмо в подарок"
+    f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b> {em(E_DIAMOND, "💎")}\n\n'
+    f'{em(E_CHECK, "✅")} Вынос 7-10 млн — 150₽\n'
+    f'{em(E_CHECK, "✅")} Вынос 12-15 млн — 222₽\n'
+    f'{em(E_CHECK, "✅")} Вынос 30-40 млн — 555₽\n'
+    f'{em(E_CHECK, "✅")} Вынос 50-60 млн — 750₽\n'
+    f'{em(E_CHECK, "✅")} Вынос 100 млн — 1500₽\n\n'
+    f'{em(E_INFO, "ℹ️")} Все компоненты и письма с радиационной зоны ваши\n'
+    f'{em(E_INFO, "ℹ️")} Возврат утерянных вещей экипировки, в случае проигрыша\n'
+    f'{em(E_INFO, "ℹ️")} Все вещи с типов ваши, мы поможем вынести.\n\n'
+    f'{em(E_HEART, "❤️‍🔥")} Даем ф6 сета с мк ВК и письмо в подарок'
 )
 
 SUPPORT_8_DESC = (
-    "<b>СОПРОВОЖДЕНИЕ НА 8 КАРТУ</b>\n\n"
-    "10 млн + 3-4 билетов — 200₽\n"
-    "12-15 млн + 6-8 билетов — 325₽\n"
-    "30-40 млн + 12-15 билетов — 750₽\n"
-    "50-60 млн + 18-24 билетов — 999₽\n"
-    "100 млн + 40-50 билетов — 1850₽\n\n"
-    "Все компоненты и письма с радиационной зоны ваши\n"
-    "Возврат утерянных вещей экипировки, в случае проигрыша\n"
-    "Все вещи с типов ваши, мы поможем вынести.\n\n"
-    "Даем ф6 сета с мк ВК и письмо в подарок"
+    f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ НА 8 КАРТУ</b> {em(E_DIAMOND, "💎")}\n\n'
+    f'{em(E_CHECK, "✅")} 10 млн + 3-4 билетов — 200₽\n'
+    f'{em(E_CHECK, "✅")} 12-15 млн + 6-8 билетов — 325₽\n'
+    f'{em(E_CHECK, "✅")} 30-40 млн + 12-15 билетов — 750₽\n'
+    f'{em(E_CHECK, "✅")} 50-60 млн + 18-24 билетов — 999₽\n'
+    f'{em(E_CHECK, "✅")} 100 млн + 40-50 билетов — 1850₽\n\n'
+    f'{em(E_INFO, "ℹ️")} Все компоненты и письма с радиационной зоны ваши\n'
+    f'{em(E_INFO, "ℹ️")} Возврат утерянных вещей экипировки, в случае проигрыша\n'
+    f'{em(E_INFO, "ℹ️")} Все вещи с типов ваши, мы поможем вынести.\n\n'
+    f'{em(E_HEART, "❤️‍🔥")} Даем ф6 сета с мк ВК и письмо в подарок'
 )
 
-# Все тарифы в одном словаре
 SUPPORT_PRICES = {}
 SUPPORT_NAMES = {}
 SUPPORT_DESCRIPTIONS = {}
@@ -332,7 +332,7 @@ for key, name, price in SUPPORT_8_TARIFFS:
     SUPPORT_DESCRIPTIONS[key] = SUPPORT_8_DESC
 
 # ============================================================
-# БУСТ БАЛАНСА — новые цены
+# БУСТ
 # ============================================================
 BOOST_PRICES = [
     ("10.000.000", 120),
@@ -353,30 +353,32 @@ def main_menu():
         [{"text": "КОМПЛЕКТЫ", "callback_data": "menu_kits", "style": "primary", "icon_custom_emoji_id": BTN_KITS},
          {"text": "СКУПКА ЛУТА", "callback_data": "menu_loot", "style": "primary", "icon_custom_emoji_id": BTN_LOOT}],
         [{"text": "БУСТ БАЛАНСА", "callback_data": "menu_boost", "style": "success", "icon_custom_emoji_id": BTN_BOOST}],
-        [{"text": "РЕГЛАМЕНТ", "url": "https://t.me/+MU3bQoEK9rUxYTIy", "style": "danger", "icon_custom_emoji_id": BTN_RULES},
-         {"text": "НИШТЯКИ", "url": "https://t.me/kranzayy_nustaku", "style": "success", "icon_custom_emoji_id": BTN_PERKS}],
-        [{"text": "Отзывы", "url": "https://t.me/kranzayy_OTZ", "style": "primary", "icon_custom_emoji_id": BTN_REVIEWS}],
+        [{"text": "РЕГЛАМЕНТ", "url": RULES_URL, "style": "danger", "icon_custom_emoji_id": BTN_RULES}],
+        [{"text": "Отзывы", "url": REVIEWS_URL, "style": "primary", "icon_custom_emoji_id": BTN_REVIEWS}],
     ]}
 
 def support_card_menu():
-    """Выбор карты — 7 или 8"""
     return {"inline_keyboard": [
-        [{"text": "📌 Сопровождение на 7 карту", "callback_data": "sup_card_7", "style": "success", "icon_custom_emoji_id": E_CARD}],
-        [{"text": "📌 Сопровождение на 8 карту", "callback_data": "sup_card_8", "style": "primary", "icon_custom_emoji_id": E_CARD}],
+        [{"text": "Сопровождение на 7 карту", "callback_data": "sup_card_7", "style": "success", "icon_custom_emoji_id": E_CARD}],
+        [{"text": "Сопровождение на 8 карту", "callback_data": "sup_card_8", "style": "primary", "icon_custom_emoji_id": E_CARD}],
         [{"text": "Назад", "callback_data": "back_main", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
     ]}
 
 def support_7_menu():
     kb = []
-    for key, name, price in SUPPORT_7_TARIFFS:
-        kb.append([{"text": name, "callback_data": f"sup_{key}", "style": "success", "icon_custom_emoji_id": E_CHECK}])
+    for i, (key, name, price) in enumerate(SUPPORT_7_TARIFFS):
+        styles = ["success", "primary", "danger"]
+        style = styles[i % 3]
+        kb.append([{"text": name, "callback_data": f"sup_{key}", "style": style, "icon_custom_emoji_id": E_CHECK}])
     kb.append([{"text": "Назад", "callback_data": "menu_support", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
     return {"inline_keyboard": kb}
 
 def support_8_menu():
     kb = []
-    for key, name, price in SUPPORT_8_TARIFFS:
-        kb.append([{"text": name, "callback_data": f"sup_{key}", "style": "primary", "icon_custom_emoji_id": E_CHECK}])
+    for i, (key, name, price) in enumerate(SUPPORT_8_TARIFFS):
+        styles = ["primary", "danger", "success"]
+        style = styles[i % 3]
+        kb.append([{"text": name, "callback_data": f"sup_{key}", "style": style, "icon_custom_emoji_id": E_CHECK}])
     kb.append([{"text": "Назад", "callback_data": "menu_support", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
     return {"inline_keyboard": kb}
 
@@ -489,12 +491,12 @@ def start_purchase(chat_id, itype, ikey, iname, price):
         f'{em(E_BOX, "📦")} <b>ОПЛАТА ЗАКАЗА</b> {em(E_BOX, "📦")}\n\n'
         f'{em(E_USER, "👤")} Товар: <b>{iname}</b>\n'
         f'{em(E_PRICE, "💵")} Сумма: <b>{price}₽</b>\n\n'
-        f'{em(E_MONEY, "💛")} <b>РЕКВИЗИТЫ:</b> {em(E_MONEY, "💛")}\n\n'
+        f'{em(E_MONEY, "💛")} <b>РЕКВИЗИТЫ</b> {em(E_MONEY, "💛")}\n\n'
         f'{em(E_CARD, "💳")} По номеру карты:\n'
         f'<code>{PAY_CARD}</code>\n\n'
         f'{em(E_PHONE, "📱")} По номеру телефона:\n'
         f'<code>{PAY_PHONE}</code>\n\n'
-        f'{em(E_INFO, "ℹ️")} Банк: {PAY_BANK}\n'
+        f'{em(E_SHOP, "🏦")} Банк получателя: {PAY_BANK}\n'
         f'{em(E_USER, "👤")} Получатель: {PAY_RECIPIENT}\n\n'
         f'{em(E_CHECK, "✅")} После оплаты чек обязательно!\n\n'
         f'{em(E_INFO, "ℹ️")} Нажмите «Я оплатил»'
@@ -612,7 +614,7 @@ def process_join(chat_id, cb_id, pid):
     edit_safe(GROUP_ID, gm["message_id"], nt, markup)
 
 # ============================================================
-# ОТПРАВКА QR АДМИНОМ
+# QR ОТ АДМИНА
 # ============================================================
 
 def admin_send_qr_to_buyer(pid, file_id, caption=""):
@@ -639,7 +641,7 @@ def process_owner_photo(chat_id, file_id, caption=""):
         break
 
 # ============================================================
-# ЗАВЕРШЕНИЕ
+# ЗАВЕРШЕНИЕ / ОТЗЫВ
 # ============================================================
 
 def owner_done(cb_id, pid, yes):
@@ -742,25 +744,21 @@ def handle_update(u):
                 send_main_menu(chat_id)
                 return
             
-            # Сопровождения — сначала выбор карты
             if data == "menu_support":
                 answer_callback(cb_id)
                 send_replacing(chat_id, SUPPORT_CARD_MENU_TEXT, support_card_menu())
                 return
             
-            # Выбор 7 карты
             if data == "sup_card_7":
                 answer_callback(cb_id)
                 send_replacing(chat_id, SUPPORT_7_DESC, support_7_menu())
                 return
             
-            # Выбор 8 карты
             if data == "sup_card_8":
                 answer_callback(cb_id)
                 send_replacing(chat_id, SUPPORT_8_DESC, support_8_menu())
                 return
             
-            # Тариф сопровождения выбран
             if data.startswith("sup_"):
                 key = data.replace("sup_", "")
                 if key in SUPPORT_PRICES:
@@ -780,7 +778,7 @@ def handle_update(u):
             
             if data == "menu_boost":
                 answer_callback(cb_id)
-                bt = f'{em(BTN_BOOST_PRICE, "💎")} <b>ПРАЙС БУСТ БАЛАНСА</b>\n\n'
+                bt = f'{em(BTN_BOOST_PRICE, "💎")} <b>ПРАЙС БУСТ БАЛАНСА</b> {em(BTN_BOOST_PRICE, "💎")}\n\n'
                 for a, p in BOOST_PRICES:
                     bt += f'{em(E_PRICE, "💵")} БУСТ {a} — {p}₽\n'
                 send_replacing(chat_id, bt, boost_menu())
