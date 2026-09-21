@@ -1,5 +1,6 @@
 # ============================================================
-# ZEXXIT METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v20
+# ZEXXIT METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v21
+# НЕСКОЛЬКО АДМИНОВ
 # ============================================================
 
 import requests
@@ -31,7 +32,10 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = "8716049396:AAFeINENN7-aCQfEWtqoMgydZ5y6RD2Kq94"
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# Админы
 OWNER_ID = 6555825110
+ADMIN_IDS = [6555825110, 7859018079, 7706740961]
+
 GROUP_ID = -1003575646091
 REVIEWS_CHANNEL = -1003836138921
 PHOTO_URL = "https://i.ibb.co/R4603sD3/IMG-3346.jpg"
@@ -73,7 +77,6 @@ E_BAG       = "5431406343917414987"
 E_BOX       = "5429424809215797643"
 E_CARD      = "5310169226856644648"
 E_PHONE     = "5310076249404621168"
-E_FIRE      = "5330051403563943171"
 E_UC        = "5318970495314436977"
 
 BTN_SUPPORT = "5269762028506989874"
@@ -96,7 +99,7 @@ review_pending = {}
 awaiting_qr_from_admin = {}
 
 # ============================================================
-# ЭМОДЗИ-ФУНКЦИИ
+# ПРЕМИУМ-ЭМОДЗИ ФУНКЦИИ
 # ============================================================
 def em(eid, fallback="⭐"):
     return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
@@ -238,6 +241,11 @@ def clear_last_message(user_id):
     if uid in user_data:
         user_data[uid]["last_msg_id"] = None
 
+def send_to_all_admins(text, reply_markup=None):
+    """Отправляет сообщение всем админам"""
+    for admin_id in ADMIN_IDS:
+        send_safe(admin_id, text, reply_markup)
+
 # ============================================================
 # ТЕКСТЫ
 # ============================================================
@@ -267,7 +275,7 @@ LOOT_TEXT = (
 )
 
 # ============================================================
-# UC — новая кнопка
+# UC
 # ============================================================
 UC_TARIFFS = [
     ("uc_60",   "60 UC — 90₽",              90),
@@ -561,8 +569,10 @@ def process_paid(chat_id, cb_id, pid):
         f'{em(E_PRICE, "💵")} Сумма: {o["price"]}₽\n\n'
         f'{em(E_INFO, "ℹ️")} Пришли ли вам деньги?'
     )
-    send_safe(OWNER_ID, owner_text, owner_confirm_menu(pid))
-    answer_callback(cb_id, f'{em(E_CHECK, "✅")} Отправлено админу')
+    # Отправляем всем админам
+    send_to_all_admins(owner_text, owner_confirm_menu(pid))
+    
+    answer_callback(cb_id, f'{em(E_CHECK, "✅")} Отправлено админам')
     send_replacing(chat_id, f'{em(E_TIME, "⏳")} Ожидайте подтверждения...')
 
 def owner_confirm(cb_id, pid, yes):
@@ -574,20 +584,18 @@ def owner_confirm(cb_id, pid, yes):
         o["status"] = "awaiting_info"
         logger.info(f'✅ {pid}: админ подтвердил, тип: {o["type"]}')
         
-        # БУСТ — ждём QR от админа
         if o["type"] == "boost":
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Оплата подтверждена!</b>\n\n'
                 f'{em(E_INFO, "ℹ️")} Ожидайте QR-код от админа.\n\n'
                 f'{em(E_TIME, "⏳")} Максимум 20 минут.')
             awaiting_qr_from_admin[pid] = True
-            send_safe(OWNER_ID,
+            send_to_all_admins(
                 f'{em(E_INFO, "ℹ️")} <b>Отправьте QR-код</b> для заказа {pid}\n\n'
                 f'{em(E_USER, "👤")} Покупатель: @{o["username"]}\n'
                 f'{em(E_BOX, "📦")} {o["item_name"]}',
                 owner_send_qr_menu(pid))
         else:
-            # СОПРОВОЖДЕНИЯ и UC — просим PUBG ID
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Заказ оплачен!</b>\n\n'
                 f'{em(E_USER, "🆔")} Введите ваш PUBG ID (только цифры, до 25):')
@@ -617,9 +625,9 @@ def process_pubg_id(chat_id, pid_text):
     uname = o.get("username", "user")
     logger.info(f'🆔 {key}: PUBG {pid_text}, тип: {o["type"]}')
     
-    # Для UC — уведомление только админу
     if o["type"] == "uc":
-        send_safe(OWNER_ID,
+        # Для UC — уведомление только админам
+        send_to_all_admins(
             f'{em(E_UC, "💵")} <b>КУПЛЕНЫ UC</b> {em(E_UC, "💵")}\n\n'
             f'{em(E_USER, "👤")} Покупатель: @{uname}\n'
             f'{em(E_BOX, "📦")} Товар: {o["item_name"]}\n'
@@ -633,7 +641,6 @@ def process_pubg_id(chat_id, pid_text):
         )
         return True
     
-    # Для сопровождений — уведомление в группу + описание
     if o["type"] == "support":
         group_messages[key] = {"message_id": None, "parts": [f"@{uname}"]}
         text = build_group_text(key)
@@ -687,12 +694,12 @@ def admin_send_qr_to_buyer(pid, file_id, caption=""):
         ))
     o["status"] = "awaiting_done"
     awaiting_qr_from_admin.pop(pid, None)
-    send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} QR отправлен покупателю', owner_done_menu(pid))
+    send_to_all_admins(f'{em(E_CHECK, "✅")} QR отправлен покупателю', owner_done_menu(pid))
     return True
 
 def process_owner_photo(chat_id, file_id, caption=""):
     if not awaiting_qr_from_admin:
-        send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет активных заказов для QR')
+        send_safe(chat_id, f'{em(E_CROSS, "⚠️")} Нет активных заказов для QR')
         return
     for pid in list(awaiting_qr_from_admin.keys()):
         admin_send_qr_to_buyer(pid, file_id, caption)
@@ -716,12 +723,12 @@ def owner_done(cb_id, pid, yes):
         )
         review_pending[str(buyer_id)] = True
         answer_callback(cb_id, f'{em(E_CHECK, "✅")} Закрыт')
-        send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} Заказ {pid} закрыт')
+        send_to_all_admins(f'{em(E_CHECK, "✅")} Заказ {pid} закрыт')
     else:
         o["status"] = "awaiting_qr"
         awaiting_qr_from_admin[pid] = True
         send_safe(o["user_id"], f'{em(E_INFO, "ℹ️")} Админ пришлёт новый QR.')
-        send_safe(OWNER_ID,
+        send_to_all_admins(
             f'{em(E_INFO, "ℹ️")} Отправьте новый QR для заказа {pid}',
             owner_send_qr_menu(pid))
         answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Ждём QR')
@@ -762,7 +769,8 @@ def handle_update(u):
             text = m.get("text", "")
             photo = m.get("photo")
             
-            if photo and chat_id == OWNER_ID:
+            # Фото от админа
+            if photo and chat_id in ADMIN_IDS:
                 file_id = photo[-1]["file_id"]
                 if awaiting_qr_from_admin:
                     process_owner_photo(chat_id, file_id, m.get("caption", ""))
@@ -773,7 +781,7 @@ def handle_update(u):
                             admin_send_qr_to_buyer(pid, file_id, m.get("caption", ""))
                             cnt += 1
                     if cnt == 0:
-                        send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет заказов для QR')
+                        send_safe(chat_id, f'{em(E_CROSS, "⚠️")} Нет заказов для QR')
                 return
             
             if text == "/start":
@@ -867,7 +875,7 @@ def handle_update(u):
                 pid = data.replace("send_qr_", "")
                 awaiting_qr_from_admin[pid] = True
                 answer_callback(cb_id, f'{em(E_INFO, "ℹ️")} Отправьте фото QR')
-                send_safe(OWNER_ID,
+                send_safe(chat_id,
                     f'{em(E_INFO, "ℹ️")} Пришлите фото QR-кода для заказа {pid}')
                 return
             
@@ -919,14 +927,15 @@ def notify_startup(bot_username):
             f'{em(E_DIAMOND, "📊")} Режим: поллинг\n'
             f'{em(E_USER, "👥")} Группа: <code>{GROUP_ID}</code>\n'
             f'{em(E_HEART, "⭐")} Отзывы: <code>{REVIEWS_CHANNEL}</code>\n'
-            f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n\n'
+            f'{em(E_USER, "👥")} Админов: {len(ADMIN_IDS)}\n'
+            f'{em(E_USER, "👤")} Главный: <code>{OWNER_ID}</code>\n\n'
             f'<b>Готов принимать заказы!</b>'
         )
-        r = send_safe(OWNER_ID, text)
-        if r.get("ok"):
-            logger.info("✅ Уведомление о запуске отправлено")
-            return True
-        return False
+        # Отправляем всем админам
+        for admin_id in ADMIN_IDS:
+            send_safe(admin_id, text)
+        logger.info(f"✅ Уведомление отправлено {len(ADMIN_IDS)} админам")
+        return True
     except Exception as e:
         logger.error(f'💥 notify_startup: {e}')
         return False
@@ -938,6 +947,7 @@ def notify_startup(bot_username):
 def main():
     logger.info("=" * 60)
     logger.info("🚀 ZEXXIT METRO SHOP BOT — ЗАПУСК")
+    logger.info(f"👥 Админы: {ADMIN_IDS}")
     logger.info("=" * 60)
     
     if not check_internet():
