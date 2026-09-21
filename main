@@ -1,5 +1,5 @@
 # ============================================================
-# ZEXXIT METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v19
+# ZEXXIT METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v20
 # ============================================================
 
 import requests
@@ -39,6 +39,7 @@ PHOTO_FILE_ID = None
 
 REVIEWS_URL = "https://t.me/Otziv_raxa11"
 RULES_URL = "https://t.me/Zexxit_pravila"
+MANAGER = "@mngZEXXIT"
 
 PAY_PHONE = "+79657620902"
 PAY_CARD = "2200702065272812"
@@ -73,6 +74,7 @@ E_BOX       = "5429424809215797643"
 E_CARD      = "5310169226856644648"
 E_PHONE     = "5310076249404621168"
 E_FIRE      = "5330051403563943171"
+E_UC        = "5318970495314436977"
 
 BTN_SUPPORT = "5269762028506989874"
 BTN_KITS    = "5429424809215797643"
@@ -81,6 +83,7 @@ BTN_BOOST   = "5474525938668550110"
 BTN_RULES   = "5346066344473297711"
 BTN_REVIEWS = "5348035702942632055"
 BTN_BOOST_PRICE = "5231102735817918643"
+BTN_UC      = "5318970495314436977"
 
 # ============================================================
 # ХРАНИЛИЩЕ
@@ -252,7 +255,7 @@ KITS_TEXT = (
     f'{em(E_CHECK, "✅")} Обычный сет — 45₽\n'
     f'{em(E_CHECK, "✅")} Кобра сет — 55₽\n'
     f'{em(E_CHECK, "✅")} Сталь сет — 65₽\n\n'
-    f'{em(E_USER, "👤")} хотите купить — @Manager_Kranzayy'
+    f'{em(E_USER, "👤")} хотите купить — {MANAGER}'
 )
 
 LOOT_TEXT = (
@@ -260,8 +263,37 @@ LOOT_TEXT = (
     f'{em(E_CHECK, "✅")} Обычный сет — 45₽\n'
     f'{em(E_CHECK, "✅")} Кобра сет — 55₽\n'
     f'{em(E_CHECK, "✅")} Сталь сет — 65₽\n\n'
-    f'{em(E_INFO, "ℹ️")} Если хотите купить — @Manager_Kranzayy'
+    f'{em(E_INFO, "ℹ️")} Если хотите купить — {MANAGER}'
 )
+
+# ============================================================
+# UC — новая кнопка
+# ============================================================
+UC_TARIFFS = [
+    ("uc_60",   "60 UC — 90₽",              90),
+    ("uc_325",  "300+25 UC — 440₽",         440),
+    ("uc_660",  "600+60 UC — 888₽",         888),
+    ("uc_1800", "1500+300 UC — 2200₽",      2200),
+    ("uc_3850", "3000+850 UC — 4350₽",      4350),
+    ("uc_8100", "6000+2100 UC — 8650₽",     8650),
+]
+
+UC_DESC = (
+    f'{em(E_UC, "💵")} <b>КУПИТЬ UC</b> {em(E_UC, "💵")}\n\n'
+    f'{em(E_CHECK, "✅")} 60 UC — 90₽\n'
+    f'{em(E_CHECK, "✅")} 300+25 UC — 440₽\n'
+    f'{em(E_CHECK, "✅")} 600+60 UC — 888₽\n'
+    f'{em(E_CHECK, "✅")} 1500+300 UC — 2200₽\n'
+    f'{em(E_CHECK, "✅")} 3000+850 UC — 4350₽\n'
+    f'{em(E_CHECK, "✅")} 6000+2100 UC — 8650₽\n\n'
+    f'{em(E_INFO, "ℹ️")} Выберите количество UC для покупки'
+)
+
+UC_PRICES = {}
+UC_NAMES = {}
+for key, name, price in UC_TARIFFS:
+    UC_PRICES[key] = price
+    UC_NAMES[key] = name
 
 # ============================================================
 # СОПРОВОЖДЕНИЯ
@@ -273,7 +305,6 @@ SUPPORT_CARD_MENU_TEXT = (
     f'{em(E_CARD, "📌")} <b>8 карта</b> — сопровождение с гарантией'
 )
 
-# 7 карта — тарифы
 SUPPORT_7_TARIFFS = [
     ("7_10",  "Вынос 7-10 млн — 150₽",  150),
     ("7_15",  "Вынос 12-15 млн — 222₽", 222),
@@ -282,7 +313,6 @@ SUPPORT_7_TARIFFS = [
     ("7_100", "Вынос 100 млн — 1500₽",  1500),
 ]
 
-# 8 карта — тарифы
 SUPPORT_8_TARIFFS = [
     ("8_10",  "10 млн + 3-4 билетов — 200₽",   200),
     ("8_15",  "12-15 млн + 6-8 билетов — 325₽", 325),
@@ -319,17 +349,12 @@ SUPPORT_8_DESC = (
 
 SUPPORT_PRICES = {}
 SUPPORT_NAMES = {}
-SUPPORT_DESCRIPTIONS = {}
-
 for key, name, price in SUPPORT_7_TARIFFS:
     SUPPORT_PRICES[key] = price
     SUPPORT_NAMES[key] = f"7 КАРТА — {name}"
-    SUPPORT_DESCRIPTIONS[key] = SUPPORT_7_DESC
-
 for key, name, price in SUPPORT_8_TARIFFS:
     SUPPORT_PRICES[key] = price
     SUPPORT_NAMES[key] = f"8 КАРТА — {name}"
-    SUPPORT_DESCRIPTIONS[key] = SUPPORT_8_DESC
 
 # ============================================================
 # БУСТ
@@ -350,12 +375,22 @@ BOOST_PRICES = [
 def main_menu():
     return {"inline_keyboard": [
         [{"text": "СОПРОВОЖДЕНИЯ", "callback_data": "menu_support", "style": "success", "icon_custom_emoji_id": BTN_SUPPORT}],
-        [{"text": "КОМПЛЕКТЫ", "callback_data": "menu_kits", "style": "primary", "icon_custom_emoji_id": BTN_KITS},
+        [{"text": "КУПИТЬ UC", "callback_data": "menu_uc", "style": "primary", "icon_custom_emoji_id": BTN_UC}],
+        [{"text": "КОМПЛЕКТЫ", "callback_data": "menu_kits", "style": "success", "icon_custom_emoji_id": BTN_KITS},
          {"text": "СКУПКА ЛУТА", "callback_data": "menu_loot", "style": "primary", "icon_custom_emoji_id": BTN_LOOT}],
-        [{"text": "БУСТ БАЛАНСА", "callback_data": "menu_boost", "style": "success", "icon_custom_emoji_id": BTN_BOOST}],
+        [{"text": "БУСТ БАЛАНСА", "callback_data": "menu_boost", "style": "danger", "icon_custom_emoji_id": BTN_BOOST}],
         [{"text": "РЕГЛАМЕНТ", "url": RULES_URL, "style": "danger", "icon_custom_emoji_id": BTN_RULES}],
         [{"text": "Отзывы", "url": REVIEWS_URL, "style": "primary", "icon_custom_emoji_id": BTN_REVIEWS}],
     ]}
+
+def uc_menu():
+    kb = []
+    styles = ["success", "primary", "danger"]
+    for i, (key, name, price) in enumerate(UC_TARIFFS):
+        style = styles[i % 3]
+        kb.append([{"text": name, "callback_data": key, "style": style, "icon_custom_emoji_id": E_UC}])
+    kb.append([{"text": "Назад", "callback_data": "back_main", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
+    return {"inline_keyboard": kb}
 
 def support_card_menu():
     return {"inline_keyboard": [
@@ -517,7 +552,7 @@ def process_paid(chat_id, cb_id, pid):
     
     o["status"] = "awaiting_owner_confirm"
     o["username"] = get_username(chat_id)
-    logger.info(f'💰 {pid}: {chat_id} нажал Я оплатил')
+    logger.info(f'💰 {pid}: {chat_id} нажал Я оплатил, тип: {o["type"]}')
     
     owner_text = (
         f'{em(E_MONEY, "💰")} <b>ПОДТВЕРЖДЕНИЕ ОПЛАТЫ</b> {em(E_MONEY, "💰")}\n\n'
@@ -537,8 +572,9 @@ def owner_confirm(cb_id, pid, yes):
         return
     if yes:
         o["status"] = "awaiting_info"
-        logger.info(f'✅ {pid}: админ подтвердил')
+        logger.info(f'✅ {pid}: админ подтвердил, тип: {o["type"]}')
         
+        # БУСТ — ждём QR от админа
         if o["type"] == "boost":
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Оплата подтверждена!</b>\n\n'
@@ -551,6 +587,7 @@ def owner_confirm(cb_id, pid, yes):
                 f'{em(E_BOX, "📦")} {o["item_name"]}',
                 owner_send_qr_menu(pid))
         else:
+            # СОПРОВОЖДЕНИЯ и UC — просим PUBG ID
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Заказ оплачен!</b>\n\n'
                 f'{em(E_USER, "🆔")} Введите ваш PUBG ID (только цифры, до 25):')
@@ -563,6 +600,7 @@ def owner_confirm(cb_id, pid, yes):
         answer_callback(cb_id, f'{em(E_CROSS, "❌")} Отменено')
 
 def process_pubg_id(chat_id, pid_text):
+    """Покупатель ввёл PUBG ID"""
     uid = str(chat_id)
     o = None
     key = None
@@ -575,21 +613,41 @@ def process_pubg_id(chat_id, pid_text):
         return False
     
     o["pubg_id"] = pid_text
-    o["status"] = "in_group"
+    o["status"] = "done"
     uname = o.get("username", "user")
-    logger.info(f'🆔 {key}: PUBG {pid_text}')
+    logger.info(f'🆔 {key}: PUBG {pid_text}, тип: {o["type"]}')
     
-    group_messages[key] = {"message_id": None, "parts": [f"@{uname}"]}
-    text = build_group_text(key)
-    r = send_safe(GROUP_ID, text, group_join_menu(key))
-    if r.get("ok"):
-        group_messages[key]["message_id"] = r["result"]["message_id"]
-        logger.info(f'✅ {key}: в группе ({len(group_messages[key]["parts"])}/{MAX_PARTICIPANTS})')
+    # Для UC — уведомление только админу
+    if o["type"] == "uc":
+        send_safe(OWNER_ID,
+            f'{em(E_UC, "💵")} <b>КУПЛЕНЫ UC</b> {em(E_UC, "💵")}\n\n'
+            f'{em(E_USER, "👤")} Покупатель: @{uname}\n'
+            f'{em(E_BOX, "📦")} Товар: {o["item_name"]}\n'
+            f'{em(E_PRICE, "💵")} Цена: {o["price"]}₽\n'
+            f'{em(E_USER, "🆔")} PUBG ID: <code>{pid_text}</code>',
+            owner_done_menu(key))
+        
+        send_safe(chat_id,
+            f'{em(E_CHECK, "✅")} <b>Хорошо!</b>\n\n'
+            f'{em(E_INFO, "ℹ️")} Ждите в игре максимум 20 минут.'
+        )
+        return True
     
-    send_safe(chat_id,
-        f'{em(E_CHECK, "✅")} <b>Хорошо!</b>\n\n'
-        f'{em(E_INFO, "ℹ️")} Ждите в игре максимум 20 минут.'
-    )
+    # Для сопровождений — уведомление в группу + описание
+    if o["type"] == "support":
+        group_messages[key] = {"message_id": None, "parts": [f"@{uname}"]}
+        text = build_group_text(key)
+        r = send_safe(GROUP_ID, text, group_join_menu(key))
+        if r.get("ok"):
+            group_messages[key]["message_id"] = r["result"]["message_id"]
+            logger.info(f'✅ {key}: в группе ({len(group_messages[key]["parts"])}/{MAX_PARTICIPANTS})')
+        
+        send_safe(chat_id,
+            f'{em(E_CHECK, "✅")} <b>Хорошо!</b>\n\n'
+            f'{em(E_INFO, "ℹ️")} Ждите в игре максимум 20 минут.'
+        )
+        return True
+    
     return True
 
 def process_join(chat_id, cb_id, pid):
@@ -744,6 +802,18 @@ def handle_update(u):
                 send_main_menu(chat_id)
                 return
             
+            # UC
+            if data == "menu_uc":
+                answer_callback(cb_id)
+                send_replacing(chat_id, UC_DESC, uc_menu())
+                return
+            
+            if data in UC_PRICES:
+                answer_callback(cb_id)
+                start_purchase(chat_id, "uc", data, UC_NAMES[data], UC_PRICES[data])
+                return
+            
+            # Сопровождения
             if data == "menu_support":
                 answer_callback(cb_id)
                 send_replacing(chat_id, SUPPORT_CARD_MENU_TEXT, support_card_menu())
