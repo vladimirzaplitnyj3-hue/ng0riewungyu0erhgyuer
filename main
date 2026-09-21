@@ -1,0 +1,941 @@
+# ============================================================
+# ZEXXIT METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v18
+# ============================================================
+
+import requests
+import json
+import time
+import logging
+import sys
+import traceback
+import datetime
+import re
+import socket
+
+# ============================================================
+# ЛОГИРОВАНИЕ
+# ============================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('bot_debug.log', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# ============================================================
+# КОНФИГ
+# ============================================================
+BOT_TOKEN = "8716049396:AAFeINENN7-aCQfEWtqoMgydZ5y6RD2Kq94"
+BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
+OWNER_ID = 6555825110
+GROUP_ID = -1003575646091
+REVIEWS_CHANNEL = -1003836138921
+PHOTO_URL = "https://i.ibb.co/R4603sD3/IMG-3346.jpg"
+PHOTO_FILE_ID = None
+
+PAY_PHONE = "+79657620902"
+PAY_CARD = "2200702065272812"
+PAY_BANK = "Т-банк (Тинькофф)"
+PAY_RECIPIENT = "Магомед А"
+
+RECONNECT_MIN = 5
+RECONNECT_MAX = 300
+MAX_PARTICIPANTS = 4
+
+# ============================================================
+# ПРЕМИУМ-ЭМОДЗИ
+# ============================================================
+E_MENU      = "5231235536206730707"
+E_SHOP      = "5278702045883292456"
+E_STAR1     = "5330051403563943171"
+E_STAR2     = "5330245862503236304"
+E_STAR3     = "5327866716909229540"
+E_ARROW     = "5219793421207629443"
+E_CHECK     = "5219809810802829750"
+E_CROSS     = "5219835361563275589"
+E_INFO      = "5285430309720966085"
+E_TIME      = "5310169226856644648"
+E_USER      = "5316970857325687050"
+E_MONEY     = "5219714093161671306"
+E_RUB       = "5219983482100412686"
+E_PRICE     = "5219919637411556483"
+E_HEART     = "5346301287774323405"
+E_DIAMOND   = "5465556444931718975"
+E_BAG       = "5431406343917414987"
+E_BOX       = "5429424809215797643"
+E_CARD      = "5310169226856644648"
+E_PHONE     = "5310076249404621168"
+E_LIGHTNING = "5330051403563943171"
+E_FIRE      = "5346301287774323405"
+
+BTN_SUPPORT = "5269762028506989874"
+BTN_KITS    = "5429424809215797643"
+BTN_LOOT    = "5431406343917414987"
+BTN_BOOST   = "5474525938668550110"
+BTN_RULES   = "5346066344473297711"
+BTN_PERKS   = "5474196218324228716"
+BTN_REVIEWS = "5348035702942632055"
+BTN_BOOST_PRICE = "5231102735817918643"
+
+# ============================================================
+# ХРАНИЛИЩЕ
+# ============================================================
+user_data = {}
+orders = {}
+orders_counter = [0]
+group_messages = {}
+review_pending = {}
+awaiting_qr_from_admin = {}
+
+# ============================================================
+# ФУНКЦИЯ ПРЕМИУМ-ЭМОДЗИ
+# ============================================================
+def em(eid, fallback="⭐"):
+    return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
+
+def stars_row():
+    return f'{em(E_STAR1, "⭐")}{em(E_STAR2, "✨")}{em(E_STAR2, "✨")}{em(E_STAR3, "💫")}'
+
+def arrows_row(n=6):
+    return em(E_ARROW, "➡️") * n
+
+def diamond_row(n=4):
+    return em(E_DIAMOND, "💎") * n
+
+# ============================================================
+# УТИЛИТЫ
+# ============================================================
+def strip_html(text):
+    return re.sub(r'<[^>]+>', '', text)
+
+def check_internet():
+    try:
+        socket.gethostbyname("api.telegram.org")
+        return True
+    except:
+        return False
+
+def api_request(method, payload, timeout=30, retries=2):
+    url = f"{BASE_URL}/{method}"
+    for attempt in range(retries):
+        try:
+            r = requests.post(url, json=payload, timeout=timeout).json()
+            if not r.get("ok"):
+                logger.error(f"❌ {method}: {r.get('description')}")
+                if r.get("error_code", 0) in (400, 403):
+                    return r
+            return r
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.RequestException) as e:
+            if attempt < retries - 1:
+                time.sleep(2)
+            else:
+                logger.error(f"🔌 {method}: сбой")
+                return {"ok": False, "error": str(e)}
+        except Exception as e:
+            logger.error(f"💥 {method}: {e}")
+            return {"ok": False, "error": str(e)}
+    return {"ok": False, "error": "max_retries"}
+
+def send_safe(chat_id, text, reply_markup=None):
+    p = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        p["reply_markup"] = json.dumps(reply_markup)
+    r = api_request("sendMessage", p)
+    if r.get("ok"):
+        return r
+    p2 = {"chat_id": chat_id, "text": strip_html(text)}
+    if reply_markup:
+        p2["reply_markup"] = json.dumps(reply_markup)
+    return api_request("sendMessage", p2)
+
+def send_photo_safe(chat_id, photo, caption=None, reply_markup=None):
+    p = {"chat_id": chat_id, "photo": photo, "parse_mode": "HTML"}
+    if caption:
+        p["caption"] = caption
+    if reply_markup:
+        p["reply_markup"] = json.dumps(reply_markup)
+    r = api_request("sendPhoto", p)
+    if r.get("ok"):
+        return r
+    if caption:
+        p2 = {"chat_id": chat_id, "photo": photo, "caption": strip_html(caption)}
+        if reply_markup:
+            p2["reply_markup"] = json.dumps(reply_markup)
+        return api_request("sendPhoto", p2)
+    return r
+
+def edit_safe(chat_id, message_id, text, reply_markup=None):
+    p = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        p["reply_markup"] = json.dumps(reply_markup)
+    r = api_request("editMessageText", p)
+    if r.get("ok"):
+        return r
+    p2 = {"chat_id": chat_id, "message_id": message_id, "text": strip_html(text)}
+    if reply_markup:
+        p2["reply_markup"] = json.dumps(reply_markup)
+    return api_request("editMessageText", p2)
+
+def answer_callback(cb_id, text=None, alert=False):
+    p = {"callback_query_id": cb_id}
+    if text:
+        p["text"] = text
+    if alert:
+        p["show_alert"] = True
+    return api_request("answerCallbackQuery", p)
+
+def delete_message(chat_id, message_id):
+    return api_request("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+
+def get_username(chat_id):
+    try:
+        r = api_request("getChat", {"chat_id": chat_id}, retries=1)
+        if r.get("ok"):
+            u = r["result"]
+            return u.get("username") or u.get("first_name", "Пользователь")
+    except:
+        pass
+    return "Пользователь"
+
+def get_full_name(chat_id):
+    try:
+        r = api_request("getChat", {"chat_id": chat_id}, retries=1)
+        if r.get("ok"):
+            u = r["result"]
+            fn = u.get("first_name", "")
+            ln = u.get("last_name", "")
+            res = f"{fn} {ln}".strip()
+            return res if res else "Пользователь"
+    except:
+        pass
+    return "Пользователь"
+
+def gen_order_id():
+    orders_counter[0] += 1
+    return f"ORD{int(time.time())}_{orders_counter[0]}"
+
+def remember_message(user_id, message_id):
+    uid = str(user_id)
+    if uid not in user_data:
+        user_data[uid] = {}
+    user_data[uid]["last_msg_id"] = message_id
+
+def clear_last_message(user_id):
+    uid = str(user_id)
+    last_id = user_data.get(uid, {}).get("last_msg_id")
+    if last_id:
+        delete_message(user_id, last_id)
+    if uid in user_data:
+        user_data[uid]["last_msg_id"] = None
+
+# ============================================================
+# ТЕКСТЫ
+# ============================================================
+
+MAIN_CAPTION = (
+    f'{em(E_MENU, "🎁")} <b>Добро пожаловать в ZEXXIT METRO SHOP!</b> {em(E_MENU, "🎁")}\n'
+    f'{em(E_SHOP, "🏪")} • <b>ZEXXIT | Metro Shop</b>\n\n'
+    f'{stars_row()}{stars_row()}\n\n'
+    f'<b>Можете пользоваться навигацией ниже</b>\n\n'
+    f'{arrows_row()}'
+)
+
+KITS_TEXT = (
+    f'{em(E_BOX, "📦")} <b>КОМПЛЕКТЫ</b> {em(E_BOX, "📦")}\n\n'
+    f'{em(E_CHECK, "✅")} Обычный сет — 45₽\n'
+    f'{em(E_CHECK, "✅")} Кобра сет — 55₽\n'
+    f'{em(E_CHECK, "✅")} Сталь сет — 65₽\n\n'
+    f'{em(E_INFO, "ℹ️")} хотите купить — @Manager_Kranzayy'
+)
+
+LOOT_TEXT = (
+    f'{em(E_BAG, "🎒")} <b>СКУПКА ЛУТА</b> {em(E_BAG, "🎒")}\n\n'
+    f'{em(E_CHECK, "✅")} Обычный сет — 45₽\n'
+    f'{em(E_CHECK, "✅")} Кобра сет — 55₽\n'
+    f'{em(E_CHECK, "✅")} Сталь сет — 65₽\n\n'
+    f'{em(E_INFO, "ℹ️")} Если хотите купить — @Manager_Kranzayy'
+)
+
+# ============================================================
+# СОПРОВОЖДЕНИЯ
+# ============================================================
+
+SUPPORT_CARD_MENU_TEXT = (
+    f'{em(E_DIAMOND, "💎")} <b>Выберите карту для сопровождения:</b>\n\n'
+    f'{em(E_CARD, "📌")} 7 карта — сопровождение с гарантией\n'
+    f'{em(E_CARD, "📌")} 8 карта — сопровождение с гарантией'
+)
+
+# 7 карта — тарифы
+SUPPORT_7_TARIFFS = [
+    ("7_10",  "Вынос 7-10 млн — 150₽",  150),
+    ("7_15",  "Вынос 12-15 млн — 222₽", 222),
+    ("7_40",  "Вынос 30-40 млн — 555₽", 555),
+    ("7_60",  "Вынос 50-60 млн — 750₽", 750),
+    ("7_100", "Вынос 100 млн — 1500₽",  1500),
+]
+
+# 8 карта — тарифы
+SUPPORT_8_TARIFFS = [
+    ("8_10",  "10 млн + 3-4 билетов — 200₽",   200),
+    ("8_15",  "12-15 млн + 6-8 билетов — 325₽", 325),
+    ("8_40",  "30-40 млн + 12-15 билетов — 750₽", 750),
+    ("8_60",  "50-60 млн + 18-24 билетов — 999₽", 999),
+    ("8_100", "100 млн + 40-50 билетов — 1850₽", 1850),
+]
+
+SUPPORT_7_DESC = (
+    "<b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\n\n"
+    "Вынос 7-10 млн — 150₽\n"
+    "Вынос 12-15 млн — 222₽\n"
+    "Вынос 30-40 млн — 555₽\n"
+    "Вынос 50-60 млн — 750₽\n"
+    "Вынос 100 млн — 1500₽\n\n"
+    "Все компоненты и письма с радиационной зоны ваши\n"
+    "Возврат утерянных вещей экипировки, в случае проигрыша\n"
+    "Все вещи с типов ваши, мы поможем вынести.\n\n"
+    "Даем ф6 сета с мк ВК и письмо в подарок"
+)
+
+SUPPORT_8_DESC = (
+    "<b>СОПРОВОЖДЕНИЕ НА 8 КАРТУ</b>\n\n"
+    "10 млн + 3-4 билетов — 200₽\n"
+    "12-15 млн + 6-8 билетов — 325₽\n"
+    "30-40 млн + 12-15 билетов — 750₽\n"
+    "50-60 млн + 18-24 билетов — 999₽\n"
+    "100 млн + 40-50 билетов — 1850₽\n\n"
+    "Все компоненты и письма с радиационной зоны ваши\n"
+    "Возврат утерянных вещей экипировки, в случае проигрыша\n"
+    "Все вещи с типов ваши, мы поможем вынести.\n\n"
+    "Даем ф6 сета с мк ВК и письмо в подарок"
+)
+
+# Все тарифы в одном словаре
+SUPPORT_PRICES = {}
+SUPPORT_NAMES = {}
+SUPPORT_DESCRIPTIONS = {}
+
+for key, name, price in SUPPORT_7_TARIFFS:
+    SUPPORT_PRICES[key] = price
+    SUPPORT_NAMES[key] = f"7 КАРТА — {name}"
+    SUPPORT_DESCRIPTIONS[key] = SUPPORT_7_DESC
+
+for key, name, price in SUPPORT_8_TARIFFS:
+    SUPPORT_PRICES[key] = price
+    SUPPORT_NAMES[key] = f"8 КАРТА — {name}"
+    SUPPORT_DESCRIPTIONS[key] = SUPPORT_8_DESC
+
+# ============================================================
+# БУСТ БАЛАНСА — новые цены
+# ============================================================
+BOOST_PRICES = [
+    ("10.000.000", 120),
+    ("20.000.000", 250),
+    ("30.000.000", 420),
+    ("40.000.000", 550),
+    ("50.000.000", 750),
+    ("100.000.000", 1350),
+]
+
+# ============================================================
+# КЛАВИАТУРЫ
+# ============================================================
+
+def main_menu():
+    return {"inline_keyboard": [
+        [{"text": "СОПРОВОЖДЕНИЯ", "callback_data": "menu_support", "style": "success", "icon_custom_emoji_id": BTN_SUPPORT}],
+        [{"text": "КОМПЛЕКТЫ", "callback_data": "menu_kits", "style": "primary", "icon_custom_emoji_id": BTN_KITS},
+         {"text": "СКУПКА ЛУТА", "callback_data": "menu_loot", "style": "primary", "icon_custom_emoji_id": BTN_LOOT}],
+        [{"text": "БУСТ БАЛАНСА", "callback_data": "menu_boost", "style": "success", "icon_custom_emoji_id": BTN_BOOST}],
+        [{"text": "РЕГЛАМЕНТ", "url": "https://t.me/+MU3bQoEK9rUxYTIy", "style": "danger", "icon_custom_emoji_id": BTN_RULES},
+         {"text": "НИШТЯКИ", "url": "https://t.me/kranzayy_nustaku", "style": "success", "icon_custom_emoji_id": BTN_PERKS}],
+        [{"text": "Отзывы", "url": "https://t.me/kranzayy_OTZ", "style": "primary", "icon_custom_emoji_id": BTN_REVIEWS}],
+    ]}
+
+def support_card_menu():
+    """Выбор карты — 7 или 8"""
+    return {"inline_keyboard": [
+        [{"text": "📌 Сопровождение на 7 карту", "callback_data": "sup_card_7", "style": "success", "icon_custom_emoji_id": E_CARD}],
+        [{"text": "📌 Сопровождение на 8 карту", "callback_data": "sup_card_8", "style": "primary", "icon_custom_emoji_id": E_CARD}],
+        [{"text": "Назад", "callback_data": "back_main", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
+    ]}
+
+def support_7_menu():
+    kb = []
+    for key, name, price in SUPPORT_7_TARIFFS:
+        kb.append([{"text": name, "callback_data": f"sup_{key}", "style": "success", "icon_custom_emoji_id": E_CHECK}])
+    kb.append([{"text": "Назад", "callback_data": "menu_support", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
+    return {"inline_keyboard": kb}
+
+def support_8_menu():
+    kb = []
+    for key, name, price in SUPPORT_8_TARIFFS:
+        kb.append([{"text": name, "callback_data": f"sup_{key}", "style": "primary", "icon_custom_emoji_id": E_CHECK}])
+    kb.append([{"text": "Назад", "callback_data": "menu_support", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
+    return {"inline_keyboard": kb}
+
+def boost_menu():
+    kb = []
+    styles = ["success", "primary", "danger"]
+    for i, (a, p) in enumerate(BOOST_PRICES):
+        style = styles[i % 3]
+        kb.append([{"text": f"БУСТ {a} — {p}₽", "callback_data": f"boost_{a}", "style": style, "icon_custom_emoji_id": E_PRICE}])
+    kb.append([{"text": "Назад", "callback_data": "back_main", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
+    return {"inline_keyboard": kb}
+
+def back_button(cb="back_main"):
+    return {"inline_keyboard": [[{"text": "Назад", "callback_data": cb, "style": "primary", "icon_custom_emoji_id": E_CROSS}]]}
+
+def payment_menu(pid):
+    return {"inline_keyboard": [
+        [{"text": "Я оплатил", "callback_data": f"paid_{pid}", "style": "success", "icon_custom_emoji_id": E_CHECK}],
+        [{"text": "Не хочу оплачивать", "callback_data": f"cancel_{pid}", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
+    ]}
+
+def owner_confirm_menu(pid):
+    return {"inline_keyboard": [
+        [{"text": "Да, деньги пришли", "callback_data": f"owner_yes_{pid}", "style": "success", "icon_custom_emoji_id": E_CHECK}],
+        [{"text": "Нет, отменить", "callback_data": f"owner_no_{pid}", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
+    ]}
+
+def owner_done_menu(pid):
+    return {"inline_keyboard": [
+        [{"text": "Заказ выполнен — Да", "callback_data": f"done_yes_{pid}", "style": "success", "icon_custom_emoji_id": E_CHECK}],
+        [{"text": "Заказ выполнен — Нет", "callback_data": f"done_no_{pid}", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
+    ]}
+
+def owner_send_qr_menu(pid):
+    return {"inline_keyboard": [
+        [{"text": "Отправить QR-код", "callback_data": f"send_qr_{pid}", "style": "success", "icon_custom_emoji_id": E_INFO}],
+        [{"text": "Заказ выполнен — Да", "callback_data": f"done_yes_{pid}", "style": "success", "icon_custom_emoji_id": E_CHECK}],
+        [{"text": "Заказ выполнен — Нет", "callback_data": f"done_no_{pid}", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
+    ]}
+
+def group_join_menu(pid):
+    return {"inline_keyboard": [
+        [{"text": "Я участвую в сопровождении", "callback_data": f"join_{pid}", "style": "success", "icon_custom_emoji_id": E_USER}]
+    ]}
+
+# ============================================================
+# ТЕКСТ ЗАКАЗА В ГРУППЕ
+# ============================================================
+
+def build_group_text(pid):
+    o = orders.get(pid, {})
+    gm = group_messages.get(pid, {})
+    parts = gm.get("parts", [])
+    total = len(parts)
+    buyer = o.get("username", "—")
+    pubg = o.get("pubg_id", "—")
+    item = o.get("item_name", "—")
+    price = o.get("price", "—")
+    
+    text = (
+        f'{em(E_BOX, "📦")} <b>НОВЫЙ ЗАКАЗ В СОПРОВОЖДЕНИЕ</b> {em(E_BOX, "📦")}\n\n'
+        f'{em(E_USER, "👤")} Купил: @{buyer}\n'
+        f'{em(E_USER, "🆔")} PUBG ID: <code>{pubg}</code>\n\n'
+        f'{em(E_BOX, "📦")} Товар: <b>{item}</b>\n'
+        f'{em(E_PRICE, "💵")} Цена: {price}₽\n\n'
+        f'{em(E_USER, "👥")} Участвуют: {", ".join(parts)} ({total}/{MAX_PARTICIPANTS})'
+    )
+    return text
+
+# ============================================================
+# ГЛАВНОЕ МЕНЮ
+# ============================================================
+
+def send_main_menu(chat_id):
+    global PHOTO_FILE_ID
+    clear_last_message(chat_id)
+    photo = PHOTO_FILE_ID or PHOTO_URL
+    r = send_photo_safe(chat_id, photo, caption=MAIN_CAPTION, reply_markup=main_menu())
+    if r.get("ok"):
+        if not PHOTO_FILE_ID:
+            try:
+                PHOTO_FILE_ID = r["result"]["photo"][-1]["file_id"]
+                logger.info(f'💾 PHOTO_FILE_ID = "{PHOTO_FILE_ID}"')
+            except: pass
+        remember_message(chat_id, r["result"]["message_id"])
+    else:
+        r2 = send_safe(chat_id, MAIN_CAPTION, main_menu())
+        if r2.get("ok"):
+            remember_message(chat_id, r2["result"]["message_id"])
+    return r
+
+def send_replacing(chat_id, text, reply_markup=None):
+    clear_last_message(chat_id)
+    r = send_safe(chat_id, text, reply_markup)
+    if r.get("ok"):
+        remember_message(chat_id, r["result"]["message_id"])
+    return r
+
+# ============================================================
+# ЛОГИКА ПОКУПКИ
+# ============================================================
+
+def start_purchase(chat_id, itype, ikey, iname, price):
+    clear_last_message(chat_id)
+    pid = gen_order_id()
+    orders[pid] = {"user_id": chat_id, "type": itype, "item_key": ikey,
+                   "item_name": iname, "price": price, "status": "awaiting_payment"}
+    logger.info(f"🛒 {pid}: {iname} — {price}₽")
+    text = (
+        f'{em(E_BOX, "📦")} <b>ОПЛАТА ЗАКАЗА</b> {em(E_BOX, "📦")}\n\n'
+        f'{em(E_USER, "👤")} Товар: <b>{iname}</b>\n'
+        f'{em(E_PRICE, "💵")} Сумма: <b>{price}₽</b>\n\n'
+        f'{em(E_MONEY, "💛")} <b>РЕКВИЗИТЫ:</b> {em(E_MONEY, "💛")}\n\n'
+        f'{em(E_CARD, "💳")} По номеру карты:\n'
+        f'<code>{PAY_CARD}</code>\n\n'
+        f'{em(E_PHONE, "📱")} По номеру телефона:\n'
+        f'<code>{PAY_PHONE}</code>\n\n'
+        f'{em(E_INFO, "ℹ️")} Банк: {PAY_BANK}\n'
+        f'{em(E_USER, "👤")} Получатель: {PAY_RECIPIENT}\n\n'
+        f'{em(E_CHECK, "✅")} После оплаты чек обязательно!\n\n'
+        f'{em(E_INFO, "ℹ️")} Нажмите «Я оплатил»'
+    )
+    r = send_safe(chat_id, text, payment_menu(pid))
+    if r.get("ok"):
+        remember_message(chat_id, r["result"]["message_id"])
+    return pid
+
+def process_paid(chat_id, cb_id, pid):
+    o = orders.get(pid)
+    if not o:
+        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Заказ не найден', True)
+        return
+    if o["status"] != "awaiting_payment":
+        answer_callback(cb_id, f'{em(E_TIME, "⏳")} Уже обработан', True)
+        return
+    
+    o["status"] = "awaiting_owner_confirm"
+    o["username"] = get_username(chat_id)
+    logger.info(f'💰 {pid}: {chat_id} нажал Я оплатил')
+    
+    owner_text = (
+        f'{em(E_MONEY, "💰")} <b>ПОДТВЕРЖДЕНИЕ ОПЛАТЫ</b> {em(E_MONEY, "💰")}\n\n'
+        f'{em(E_USER, "👤")} Покупатель: @{o["username"]}\n'
+        f'{em(E_BOX, "📦")} Товар: {o["item_name"]}\n'
+        f'{em(E_PRICE, "💵")} Сумма: {o["price"]}₽\n\n'
+        f'{em(E_INFO, "ℹ️")} Пришли ли вам деньги?'
+    )
+    send_safe(OWNER_ID, owner_text, owner_confirm_menu(pid))
+    answer_callback(cb_id, f'{em(E_CHECK, "✅")} Отправлено админу')
+    send_replacing(chat_id, f'{em(E_TIME, "⏳")} Ожидайте подтверждения...')
+
+def owner_confirm(cb_id, pid, yes):
+    o = orders.get(pid)
+    if not o:
+        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Не найден', True)
+        return
+    if yes:
+        o["status"] = "awaiting_info"
+        logger.info(f'✅ {pid}: админ подтвердил')
+        
+        if o["type"] == "boost":
+            send_safe(o["user_id"],
+                f'{em(E_CHECK, "✅")} <b>Оплата подтверждена!</b>\n\n'
+                f'{em(E_INFO, "ℹ️")} Ожидайте QR-код от админа.\n\n'
+                f'{em(E_TIME, "⏳")} Максимум 20 минут.')
+            awaiting_qr_from_admin[pid] = True
+            send_safe(OWNER_ID,
+                f'{em(E_INFO, "ℹ️")} <b>Отправьте QR-код</b> для заказа {pid}\n\n'
+                f'{em(E_USER, "👤")} Покупатель: @{o["username"]}\n'
+                f'{em(E_BOX, "📦")} {o["item_name"]}',
+                owner_send_qr_menu(pid))
+        else:
+            send_safe(o["user_id"],
+                f'{em(E_CHECK, "✅")} <b>Заказ оплачен!</b>\n\n'
+                f'{em(E_USER, "🆔")} Введите ваш PUBG ID (только цифры, до 25):')
+        
+        answer_callback(cb_id, f'{em(E_CHECK, "✅")} Подтверждено')
+    else:
+        o["status"] = "rejected"
+        logger.info(f'❌ {pid}: админ отменил')
+        send_safe(o["user_id"], f'{em(E_CROSS, "❌")} Заказ отменён.')
+        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Отменено')
+
+def process_pubg_id(chat_id, pid_text):
+    uid = str(chat_id)
+    o = None
+    key = None
+    for k, v in orders.items():
+        if str(v.get("user_id")) == uid and v.get("status") == "awaiting_info":
+            o = v
+            key = k
+            break
+    if not o:
+        return False
+    
+    o["pubg_id"] = pid_text
+    o["status"] = "in_group"
+    uname = o.get("username", "user")
+    logger.info(f'🆔 {key}: PUBG {pid_text}')
+    
+    group_messages[key] = {"message_id": None, "parts": [f"@{uname}"]}
+    text = build_group_text(key)
+    r = send_safe(GROUP_ID, text, group_join_menu(key))
+    if r.get("ok"):
+        group_messages[key]["message_id"] = r["result"]["message_id"]
+        logger.info(f'✅ {key}: в группе ({len(group_messages[key]["parts"])}/{MAX_PARTICIPANTS})')
+    
+    send_safe(chat_id,
+        f'{em(E_CHECK, "✅")} <b>Хорошо!</b>\n\n'
+        f'{em(E_INFO, "ℹ️")} Ждите в игре максимум 20 минут.'
+    )
+    return True
+
+def process_join(chat_id, cb_id, pid):
+    if pid not in group_messages:
+        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Не найден', True)
+        return
+    gm = group_messages[pid]
+    uname = f"@{get_username(chat_id)}"
+    
+    if uname in gm["parts"]:
+        answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Уже участвуете', True)
+        return
+    if len(gm["parts"]) >= MAX_PARTICIPANTS:
+        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Мест нет', True)
+        return
+    
+    gm["parts"].append(uname)
+    answer_callback(cb_id, f'{em(E_CHECK, "✅")} ({len(gm["parts"])}/{MAX_PARTICIPANTS})')
+    
+    nt = build_group_text(pid)
+    markup = None if len(gm["parts"]) >= MAX_PARTICIPANTS else group_join_menu(pid)
+    edit_safe(GROUP_ID, gm["message_id"], nt, markup)
+
+# ============================================================
+# ОТПРАВКА QR АДМИНОМ
+# ============================================================
+
+def admin_send_qr_to_buyer(pid, file_id, caption=""):
+    o = orders.get(pid)
+    if not o:
+        return False
+    send_photo_safe(o["user_id"], file_id,
+        caption=(
+            f'{em(E_INFO, "ℹ️")} <b>Ваш QR-код!</b>\n\n'
+            f'{em(E_TIME, "⏳")} 5 минут чтобы использовать, иначе заново.\n\n'
+            + (caption or "")
+        ))
+    o["status"] = "awaiting_done"
+    awaiting_qr_from_admin.pop(pid, None)
+    send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} QR отправлен покупателю', owner_done_menu(pid))
+    return True
+
+def process_owner_photo(chat_id, file_id, caption=""):
+    if not awaiting_qr_from_admin:
+        send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет активных заказов для QR')
+        return
+    for pid in list(awaiting_qr_from_admin.keys()):
+        admin_send_qr_to_buyer(pid, file_id, caption)
+        break
+
+# ============================================================
+# ЗАВЕРШЕНИЕ
+# ============================================================
+
+def owner_done(cb_id, pid, yes):
+    o = orders.get(pid)
+    if not o:
+        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Не найден', True)
+        return
+    if yes:
+        o["status"] = "completed"
+        buyer_id = o["user_id"]
+        send_safe(buyer_id,
+            f'{em(E_CHECK, "✅")} <b>Заказ выполнен!</b>\n\n'
+            f'{em(E_HEART, "❤️‍🔥")} Напишите пожалуйста отзыв — просто отправьте сообщение с отзывом.'
+        )
+        review_pending[str(buyer_id)] = True
+        answer_callback(cb_id, f'{em(E_CHECK, "✅")} Закрыт')
+        send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} Заказ {pid} закрыт')
+    else:
+        o["status"] = "awaiting_qr"
+        awaiting_qr_from_admin[pid] = True
+        send_safe(o["user_id"], f'{em(E_INFO, "ℹ️")} Админ пришлёт новый QR.')
+        send_safe(OWNER_ID,
+            f'{em(E_INFO, "ℹ️")} Отправьте новый QR для заказа {pid}',
+            owner_send_qr_menu(pid))
+        answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Ждём QR')
+
+def process_review(chat_id, text):
+    uid = str(chat_id)
+    if uid not in review_pending:
+        return False
+    
+    del review_pending[uid]
+    uname = get_username(chat_id)
+    full_name = get_full_name(chat_id)
+    
+    review_text = (
+        f'{em(E_USER, "👤")} <b>Отзыв от</b> @{uname} ({full_name})\n\n'
+        f'{em(E_HEART, "❤️‍🔥")} <b>Отзыв:</b>\n{text}\n\n'
+        f'{diamond_row()}\n'
+        f'{em(E_SHOP, "🏪")} <i>ZEXXIT | Metro Shop</i>'
+    )
+    
+    r = send_safe(REVIEWS_CHANNEL, review_text)
+    if r.get("ok"):
+        logger.info(f'✅ Отзыв от {uname} отправлен')
+        send_safe(chat_id, f'{em(E_CHECK, "✅")} Спасибо за отзыв!')
+    else:
+        send_safe(chat_id, f'{em(E_CROSS, "❌")} Ошибка отправки.')
+    return True
+
+# ============================================================
+# ОБРАБОТКА
+# ============================================================
+
+def handle_update(u):
+    try:
+        if "message" in u:
+            m = u["message"]
+            chat_id = m["chat"]["id"]
+            text = m.get("text", "")
+            photo = m.get("photo")
+            
+            if photo and chat_id == OWNER_ID:
+                file_id = photo[-1]["file_id"]
+                if awaiting_qr_from_admin:
+                    process_owner_photo(chat_id, file_id, m.get("caption", ""))
+                else:
+                    cnt = 0
+                    for pid, o in list(orders.items()):
+                        if o.get("status") in ("in_group", "awaiting_info"):
+                            admin_send_qr_to_buyer(pid, file_id, m.get("caption", ""))
+                            cnt += 1
+                    if cnt == 0:
+                        send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет заказов для QR')
+                return
+            
+            if text == "/start":
+                logger.info(f'🖱 /start от {chat_id}')
+                send_main_menu(chat_id)
+                return
+            
+            uid = str(chat_id)
+            if uid in review_pending and text and not text.startswith("/"):
+                process_review(chat_id, text)
+                return
+            
+            if text and text.isdigit() and len(text) <= 25:
+                if process_pubg_id(chat_id, text):
+                    return
+        
+        elif "callback_query" in u:
+            cb = u["callback_query"]
+            chat_id = cb["message"]["chat"]["id"]
+            data = cb["data"]
+            cb_id = cb["id"]
+            logger.info(f'🖱 {data} от {chat_id}')
+            
+            if data == "back_main":
+                answer_callback(cb_id)
+                send_main_menu(chat_id)
+                return
+            
+            # Сопровождения — сначала выбор карты
+            if data == "menu_support":
+                answer_callback(cb_id)
+                send_replacing(chat_id, SUPPORT_CARD_MENU_TEXT, support_card_menu())
+                return
+            
+            # Выбор 7 карты
+            if data == "sup_card_7":
+                answer_callback(cb_id)
+                send_replacing(chat_id, SUPPORT_7_DESC, support_7_menu())
+                return
+            
+            # Выбор 8 карты
+            if data == "sup_card_8":
+                answer_callback(cb_id)
+                send_replacing(chat_id, SUPPORT_8_DESC, support_8_menu())
+                return
+            
+            # Тариф сопровождения выбран
+            if data.startswith("sup_"):
+                key = data.replace("sup_", "")
+                if key in SUPPORT_PRICES:
+                    answer_callback(cb_id)
+                    start_purchase(chat_id, "support", key, SUPPORT_NAMES[key], SUPPORT_PRICES[key])
+                return
+            
+            if data == "menu_kits":
+                answer_callback(cb_id)
+                send_replacing(chat_id, KITS_TEXT, back_button())
+                return
+            
+            if data == "menu_loot":
+                answer_callback(cb_id)
+                send_replacing(chat_id, LOOT_TEXT, back_button())
+                return
+            
+            if data == "menu_boost":
+                answer_callback(cb_id)
+                bt = f'{em(BTN_BOOST_PRICE, "💎")} <b>ПРАЙС БУСТ БАЛАНСА</b>\n\n'
+                for a, p in BOOST_PRICES:
+                    bt += f'{em(E_PRICE, "💵")} БУСТ {a} — {p}₽\n'
+                send_replacing(chat_id, bt, boost_menu())
+                return
+            
+            if data.startswith("boost_"):
+                a = data.replace("boost_", "")
+                for amt, pr in BOOST_PRICES:
+                    if amt == a:
+                        answer_callback(cb_id)
+                        start_purchase(chat_id, "boost", a, f"БУСТ {a}", pr)
+                        return
+                return
+            
+            if data.startswith("send_qr_"):
+                pid = data.replace("send_qr_", "")
+                awaiting_qr_from_admin[pid] = True
+                answer_callback(cb_id, f'{em(E_INFO, "ℹ️")} Отправьте фото QR')
+                send_safe(OWNER_ID,
+                    f'{em(E_INFO, "ℹ️")} Пришлите фото QR-кода для заказа {pid}')
+                return
+            
+            if data.startswith("paid_"):
+                process_paid(chat_id, cb_id, data.replace("paid_", ""))
+                return
+            
+            if data.startswith("cancel_"):
+                pid = data.replace("cancel_", "")
+                if pid in orders:
+                    orders[pid]["status"] = "cancelled"
+                answer_callback(cb_id, f'{em(E_CROSS, "❌")} Отменено')
+                send_replacing(chat_id, f'{em(E_CROSS, "❌")} Отменено', main_menu())
+                return
+            
+            if data.startswith("owner_yes_"):
+                owner_confirm(cb_id, data.replace("owner_yes_", ""), True)
+                return
+            if data.startswith("owner_no_"):
+                owner_confirm(cb_id, data.replace("owner_no_", ""), False)
+                return
+            if data.startswith("done_yes_"):
+                owner_done(cb_id, data.replace("done_yes_", ""), True)
+                return
+            if data.startswith("done_no_"):
+                owner_done(cb_id, data.replace("done_no_", ""), False)
+                return
+            if data.startswith("join_"):
+                process_join(chat_id, cb_id, data.replace("join_", ""))
+                return
+            
+            answer_callback(cb_id, f'{em(E_INFO, "❓")}')
+    
+    except Exception as e:
+        logger.error(f'💥 handle_update: {e}')
+        logger.error(traceback.format_exc())
+
+# ============================================================
+# УВЕДОМЛЕНИЕ О ЗАПУСКЕ
+# ============================================================
+
+def notify_startup(bot_username):
+    try:
+        now = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        text = (
+            f'{em(E_CHECK, "✅")} <b>ZEXXIT METRO SHOP ЗАПУЩЕН!</b> {em(E_CHECK, "✅")}\n\n'
+            f'{em(E_SHOP, "🤖")} Бот: @{bot_username}\n'
+            f'{em(E_TIME, "🕐")} Время: {now}\n'
+            f'{em(E_DIAMOND, "📊")} Режим: поллинг\n'
+            f'{em(E_USER, "👥")} Группа: <code>{GROUP_ID}</code>\n'
+            f'{em(E_HEART, "⭐")} Отзывы: <code>{REVIEWS_CHANNEL}</code>\n'
+            f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n\n'
+            f'<b>Готов принимать заказы!</b>'
+        )
+        r = send_safe(OWNER_ID, text)
+        if r.get("ok"):
+            logger.info("✅ Уведомление о запуске отправлено")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f'💥 notify_startup: {e}')
+        return False
+
+# ============================================================
+# ГЛАВНЫЙ ЗАПУСК
+# ============================================================
+
+def main():
+    logger.info("=" * 60)
+    logger.info("🚀 ZEXXIT METRO SHOP BOT — ЗАПУСК")
+    logger.info("=" * 60)
+    
+    if not check_internet():
+        logger.warning("⚠️ Нет доступа к api.telegram.org — ждём...")
+        while not check_internet():
+            time.sleep(10)
+            logger.info("🔄 Проверка...")
+    logger.info("✅ Интернет доступен")
+    
+    me = api_request("getMe", {})
+    if not me.get("ok"):
+        logger.error(f'❌ Бот не отвечает: {me}')
+        return
+    bot_username = me["result"].get("username", "unknown")
+    logger.info(f'✅ Бот найден: @{bot_username}')
+    
+    api_request("deleteWebhook", {"drop_pending_updates": True})
+    notify_startup(bot_username)
+    
+    offset = None
+    reconnect_delay = RECONNECT_MIN
+    consecutive_errors = 0
+    
+    logger.info("=" * 60)
+    logger.info("🚀 ПОЛЛИНГ ЗАПУЩЕН")
+    logger.info("=" * 60)
+    
+    while True:
+        try:
+            r = requests.get(f"{BASE_URL}/getUpdates",
+                           params={"timeout": 30, "offset": offset},
+                           timeout=35).json()
+            if r.get("ok"):
+                if consecutive_errors > 0:
+                    logger.info("✅ Соединение восстановлено")
+                consecutive_errors = 0
+                reconnect_delay = RECONNECT_MIN
+                for upd in r.get("result", []):
+                    handle_update(upd)
+                    offset = upd["update_id"] + 1
+            else:
+                logger.error(f'❌ getUpdates: {r}')
+            time.sleep(0.3)
+        except requests.exceptions.Timeout:
+            consecutive_errors += 1
+            time.sleep(2)
+        except requests.exceptions.ConnectionError:
+            consecutive_errors += 1
+            wait = min(reconnect_delay, RECONNECT_MAX)
+            logger.info(f'⏳ Переподключение через {wait} сек...')
+            time.sleep(wait)
+            reconnect_delay = min(reconnect_delay * 2, RECONNECT_MAX)
+            continue
+        except KeyboardInterrupt:
+            logger.info("⏹ Остановлен")
+            break
+        except Exception as e:
+            consecutive_errors += 1
+            logger.error(f'💥 main: {e}')
+            time.sleep(5)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("⏹ Остановлен")
+    except Exception as e:
+        logger.error(f'💥 Фатальная: {e}')
+        logger.error(traceback.format_exc())
